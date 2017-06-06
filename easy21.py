@@ -18,9 +18,11 @@ def player_play(pl_cards_sum):
     return pl_cards_sum
 
 
-def dealer_play(de_first_card):
+def dealer_play(state):
+    de_first_card = state[0]
+    players_sum = state[1]
     cards_sum = de_first_card
-    while cards_sum < 17 and cards_sum > 0:
+    while (cards_sum < 17 and cards_sum > 0) and cards_sum < players_sum:
         new_card = get_cards()
         card_color = red_or_black()
         if card_color == 'red':
@@ -30,39 +32,30 @@ def dealer_play(de_first_card):
     return cards_sum
 
 
-def step(de_first_card, player_sum, action):
-    if action == "hit":
-        player_sum = player_play(player_sum)
-        is_player_bust = player_sum > 21 or player_sum < 1
-        if is_player_bust:
-            reward = -1
-            state = (de_first_card, player_sum)
-            return(state, reward)
-        else:
-            # the only non-terminal state
-            reward = None
-            state = (de_first_card, player_sum)
-            return(state, reward)
-    if action == "stick":
-        dealers_sum = dealer_play(de_first_card)
+def step(state):
+    de_first_card = state[0]
+    player_sum = state[1]
+    player_sum = player_play(player_sum)
+    # the only non-terminal state
+    state = (de_first_card, player_sum)
+    return(state)
+
+def eval_reward(state, dealers_sum):
+        players_sum = state[1]
         is_dealer_bust = dealers_sum > 21 or dealers_sum < 1
         if is_dealer_bust:
             reward = 1
-            state = (de_first_card, player_sum)
-            return(state, reward)
+            return reward
         else:
-            if player_sum > dealers_sum:
+            if players_sum > dealers_sum:
                 reward = 1
-                state = (de_first_card, player_sum)
-                return (state, reward)
-            elif player_sum < dealers_sum:
+                return reward
+            elif players_sum < dealers_sum:
                 reward = -1
-                state = (de_first_card, player_sum)
-                return (state, reward)
-            elif player_sum == dealers_sum:
+                return reward
+            elif players_sum == dealers_sum:
                 reward = 0
-                state = (de_first_card, player_sum)
-                return (state, reward)
+                return reward
 
 def play_game():
     de_first_card = get_cards()
@@ -70,7 +63,7 @@ def play_game():
     reward = None
     player_sum = pl_first_card
     game_history = []
-    game_history.append(((de_first_card, pl_first_card), None, 'hit'))
+    # game_history.append(((de_first_card, pl_first_card), None, 'hit'))
     while reward is None:
         action = np.random.choice(['hit', 'stick'], size=1, p=[1/2, 1/2])[0]
         ((de_first_card, player_sum), reward) = step(de_first_card, player_sum, action)
