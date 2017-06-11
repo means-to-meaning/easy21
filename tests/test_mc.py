@@ -16,3 +16,19 @@ def test_create_meshgrid():
     ax.set_ylabel('Sum')
     ax.set_zlabel('Value')
     plt.show()
+
+def test_create_meshgrid2():
+    X = [0, 2, 4]
+    Y = range(0, 3)
+    Z = {}
+    for i in range(len(X)):
+        for j in range(len(Y)):
+            Z[(X[i], Y[j])] = X[i] * Y[j]
+    XX, YY, ZZ = mc.create_meshgrid(Z)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_wireframe(XX, YY, ZZ)
+    ax.set_xlabel('Dealers card')
+    ax.set_ylabel('Sum')
+    ax.set_zlabel('Value')
+    plt.show()

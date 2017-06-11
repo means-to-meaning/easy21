@@ -1,3 +1,4 @@
+
 import easy21
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -6,7 +7,7 @@ import pickle
 import os
 np.random.seed(42)
 
-class MC_Params():
+class MCParams():
 
     def __init__(self):
         dealers_card = range(1, 11)
@@ -25,15 +26,25 @@ class MC_Params():
             self.N_sa[state] = {'hit': 0, 'stick': 0}
         self.optimal_policy = dict.fromkeys(states, None)
 
-        def __getitem__(self, key):
-            param_list = [self.N_0[key],
-                          self.V_s[key],
-                          self.N_s[key],
-                          self.Q_sa[key],
-                          self.N_sa[key]
-                         ]
-            for param in param_list:
-                print(str(param))
+    def __getitem__(self, state):
+        params = {}
+        if state in self.V_s:
+            params["V_s"] = self.V_s[state]
+        else:
+            params["V_s"] = None
+        if state in self.N_s:
+            params["N_s"] = self.N_s[state]
+        else:
+            params["N_s"] = None
+        if state in self.Q_sa:
+            params["Q_sa"] = self.Q_sa[state]
+        else:
+            params["Q_sa"] = None
+        if state in self.N_sa:
+            params["N_sa"] = self.N_sa[state]
+        else:
+            params["N_sa"] = None
+        return params
 
     def iterate_value(self, state, reward):
         G = reward
@@ -104,7 +115,7 @@ def play_game(mc_params):
 
 
 def mc_policy_iteration(N_0=100, max_iter=10000):
-    mc_params = MC_Params()
+    mc_params = MCParams()
     loop_counter = 0
     while loop_counter < max_iter:
         if loop_counter % 10000 == 0:
@@ -155,6 +166,8 @@ def plot_value_function(V_s):
     ax = fig.add_subplot(111, projection='3d')
     XX, YY, ZZ = create_meshgrid(V_s)
     ax.plot_wireframe(XX, YY, ZZ)
+    ax.set_xticks(range(1, 11))
+    ax.set_yticks(range(1, 22, 2))
     ax.set_xlabel('Dealers card')
     ax.set_ylabel('Sum')
     ax.set_zlabel('Value')
@@ -174,6 +187,9 @@ def plot_policy_function(policy):
     numeric_policy = {k: action_to_int(v) for k, v in policy.items()}
     XX, YY, ZZ = create_meshgrid(numeric_policy)
     ax.plot_wireframe(XX, YY, ZZ)
+    ax.set_xticks(range(1, 11))
+    ax.set_yticks(range(1, 22, 2))
+    ax.set_zticks([0, 1])
     ax.set_xlabel('Dealers card')
     ax.set_ylabel('Sum')
     ax.set_zlabel('Action')
@@ -181,51 +197,24 @@ def plot_policy_function(policy):
 
 
 def main():
-    # X = [0, 2, 4]
-    # Y = range(0, 3)
-    # Z = {}
-    # for i in range(len(X)):
-    #     Z[(X[i], Y[i])] = X[i] * Y[i]
-    # XX, YY, ZZ = create_meshgrid(Z)
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.plot_wireframe(XX, YY, ZZ)
-    # ax.set_xlabel('Dealers card')
-    # ax.set_ylabel('Sum')
-    # ax.set_zlabel('Value')
-    # plt.show()
-
-    # X = [0, 2, 4]
-    # Y = range(0, 3)
-    # Z = {}
-    # for i in range(len(X)):
-    #     for j in range(len(Y)):
-    #         Z[(X[i], Y[j])] = X[i] * Y[j]
-    # XX, YY, ZZ = create_meshgrid(Z)
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.plot_wireframe(XX, YY, ZZ)
-    # ax.set_xlabel('Dealers card')
-    # ax.set_ylabel('Sum')
-    # ax.set_zlabel('Value')
-    # plt.show()
-
     policy_file = "data/Q_sa.pkl"
     if not os.path.exists(policy_file):
         # iterate policy
         mc_params = mc_policy_iteration(max_iter=100000)
+        print(mc_params[(10, 12)])
         plot_value_function(mc_params.V_s)
         plot_policy_function(mc_params.optimal_policy)
         pickle.dump(mc_params, open(policy_file, "wb"))
     else:
         # evalutate existing policy
         mc_params = pickle.load(open(policy_file, "rb"))
+        print(mc_params[(10, 12)])
         optimal_policy = mc_params.optimal_policy
-        mc_params = MC_Params()
+        mc_params = MCParams()
         mc_params.optimal_policy = optimal_policy
         mc_params = mc_policy_evaluation(mc_params, max_iter=50000)
         plot_value_function(mc_params.V_s)
-
+        plot_policy_function(mc_params.optimal_policy)
 
 if __name__ == "__main__":
     main()

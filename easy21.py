@@ -41,21 +41,21 @@ def step(state):
     return(state)
 
 def eval_reward(state, dealers_sum):
-        players_sum = state[1]
-        is_dealer_bust = dealers_sum > 21 or dealers_sum < 1
-        if is_dealer_bust:
+    players_sum = state[1]
+    is_dealer_bust = dealers_sum > 21 or dealers_sum < 1
+    if is_dealer_bust:
+        reward = 1
+        return reward
+    else:
+        if players_sum > dealers_sum:
             reward = 1
             return reward
-        else:
-            if players_sum > dealers_sum:
-                reward = 1
-                return reward
-            elif players_sum < dealers_sum:
-                reward = -1
-                return reward
-            elif players_sum == dealers_sum:
-                reward = 0
-                return reward
+        elif players_sum < dealers_sum:
+            reward = -1
+            return reward
+        elif players_sum == dealers_sum:
+            reward = 0
+            return reward
 
 def play_game():
     de_first_card = get_cards()
