@@ -79,36 +79,25 @@ class MCParams():
                 action = np.random.choice(['hit', 'stick'], size=1, p=[1 / 2, 1 / 2])[0]
         return action
 
-    # def get_optimal_policy(self):
-    #     optimal_policy = {}
-    #     for state, action_rewards_dict in self.Q_sa.items():
-    #         action = max(action_rewards_dict, key=lambda i: action_rewards_dict[i])
-    #         optimal_policy[state] = action
-    #     self.optimal_policy = optimal_policy
-
 
 def play_game(mc_params):
-    de_first_card = easy21.get_cards()
-    pl_first_card = easy21.get_cards()
+    dealers_first_card = easy21.get_card()
+    players_first_card = easy21.get_card()
+    state = (dealers_first_card, players_first_card)
     reward = None
-    player_sum = pl_first_card
     game_history = []
-    # game_history.append(((de_first_card, pl_first_card), None, 'hit'))
-    state = (de_first_card, pl_first_card)
-    while True:
+    while not easy21.is_player_bust(state):
         action = str(mc_params.get_action(state))
         game_history.append((state, action))
-        if action == "hit":
-            state = easy21.step(state)
-            players_sum = state[1]
-            is_player_bust = players_sum > 21 or players_sum < 1
-            if is_player_bust:
-                reward = -1
-                break
-        elif action == "stick":
-            dealers_sum = easy21.dealer_play(state)
-            reward = easy21.eval_reward(state, dealers_sum)
+        if action == "stick":
             break
+        else:
+            state = easy21.step(state)
+    if easy21.is_player_bust(state):
+        reward = -1
+    else:
+        dealers_sum = easy21.dealer_play(state)
+        reward = easy21.eval_reward(state, dealers_sum)
     if reward is None:
         raise Exception("Reward should not be None!")
     return (game_history, reward)
