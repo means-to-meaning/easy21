@@ -19,7 +19,8 @@ class MCParams():
         self.Q_sa = {}
         self.N_sa = {}
         for state in states:
-            if state[0] > state[1]:
+            # ALGO_CHOICE: player should never stick if dealer has higher card
+            if state[0] >= state[1]:
                 self.Q_sa[state] = {'hit': 0, 'stick': -1}
             else:
                 self.Q_sa[state] = {'hit': 0, 'stick': 0}
@@ -65,8 +66,8 @@ class MCParams():
     def get_action(self, state):
         dealers_card = state[0]
         players_sum = state[1]
-        # never stick if less than dealers card else we automatically loose
-        if players_sum < dealers_card:
+        # ALGO_CHOICE: never stick if less than dealers card else we automatically loose
+        if players_sum <= dealers_card:
             return 'hit'
         eps = self.N_0 / (self.N_0 + self.N_s[state])
         action_type = np.random.choice(["explore", "exploit"], size=1, p=[eps, 1 - eps])[0]
@@ -86,21 +87,13 @@ def play_game(mc_params):
     state = (dealers_first_card, players_first_card)
     reward = None
     game_history = []
-    while not easy21.is_player_bust(state):
+    action = ""
+    while not (easy21.is_player_bust(state) or action == "stick"):
         action = str(mc_params.get_action(state))
-        game_history.append((state, action))
-        if action == "stick":
-            break
-        else:
-            state = easy21.step(state)
-    if easy21.is_player_bust(state):
-        reward = -1
-    else:
-        dealers_sum = easy21.dealer_play(state)
-        reward = easy21.eval_reward(state, dealers_sum)
-    if reward is None:
-        raise Exception("Reward should not be None!")
-    return (game_history, reward)
+        old_state = state
+        state, reward, dealers_sum = easy21.step(state, action)
+        game_history.append((old_state, action, reward, dealers_sum, state))
+    return (game_history)
 
 
 def mc_policy_iteration(N_0=100, max_iter=10000):
@@ -109,13 +102,14 @@ def mc_policy_iteration(N_0=100, max_iter=10000):
     while loop_counter < max_iter:
         if loop_counter % 10000 == 0:
             print('*')
-        game_history, reward = play_game(mc_params)
+        game_history = play_game(mc_params)
         # Update the policy estimate
         # if reward > -1:
         #     print("Positive reward:" + str(reward))
         for record in game_history:
             state = record[0]
             action = record[1]
+            reward = record[2]
             mc_params.iterate_value(state, reward)
             mc_params.iterate_policy(state, action, reward)
         loop_counter += 1
@@ -127,9 +121,10 @@ def mc_policy_evaluation(mc_params, max_iter=10000):
     while loop_counter < max_iter:
         if loop_counter % 10000 == 0:
             print('*')
-        game_history, reward = play_game(mc_params)
+        game_history = play_game(mc_params)
         for record in game_history:
             state = record[0]
+            reward = record[2]
             mc_params.iterate_value(state, reward)
         loop_counter += 1
     return mc_params
@@ -178,7 +173,7 @@ def plot_policy_function(policy):
     ax.plot_wireframe(XX, YY, ZZ)
     ax.set_xticks(range(1, 11))
     ax.set_yticks(range(1, 22, 2))
-    ax.set_zticks([0, 1])
+    ax.set_zticks([-1, 1])
     ax.set_xlabel('Dealers card')
     ax.set_ylabel('Sum')
     ax.set_zlabel('Action')

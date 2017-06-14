@@ -22,7 +22,8 @@ def dealer_play(state):
     de_first_card = state[0]
     players_sum = state[1]
     cards_sum = de_first_card
-    while (cards_sum < 17 and cards_sum > 0) and cards_sum < players_sum:
+    #
+    while (cards_sum < 17 and cards_sum > 0):
         new_card = get_card()
         card_color = red_or_black()
         if card_color == 'red':
@@ -37,16 +38,27 @@ def is_player_bust(state):
     return(players_sum > 21 or players_sum < 1)
 
 
-def step(state):
+def step(state, action):
     dealers_card = state[0]
     players_sum = state[1]
-    players_sum = player_play(players_sum)
-    # the only non-terminal state
-    return((dealers_card, players_sum))
+    dealers_sum = None
+    reward = None
+    if action == "hit":
+        players_sum = player_play(players_sum)
+        state = (dealers_card, players_sum)
+        if is_player_bust(state):
+            reward = -1
+        else:
+            reward = 0
+    elif action == "stick":
+        dealers_sum = dealer_play(state)
+        reward = eval_reward(state[1], dealers_sum)
+    if reward is None:
+        raise Exception("Reward should not be None!")
+    return (state, reward, dealers_sum)
 
 
-def eval_reward(state, dealers_sum):
-    players_sum = state[1 ]
+def eval_reward(players_sum, dealers_sum):
     is_dealer_bust = dealers_sum > 21 or dealers_sum < 1
     if is_dealer_bust:
         reward = 1
@@ -61,19 +73,3 @@ def eval_reward(state, dealers_sum):
         elif players_sum == dealers_sum:
             reward = 0
             return reward
-
-# def play_game():
-#     de_first_card = get_cards()
-#     pl_first_card = get_cards()
-#     reward = None
-#     player_sum = pl_first_card
-#     game_history = []
-#     # game_history.append(((de_first_card, pl_first_card), None, 'hit'))
-#     while reward is None:
-#         action = np.random.choice(['hit', 'stick'], size=1, p=[1/2, 1/2])[0]
-#         ((de_first_card, player_sum), reward) = step(de_first_card, player_sum, action)
-#         if reward is None:
-#             game_history.append(((de_first_card, player_sum), 0, action))
-#         else:
-#             game_history.append(((de_first_card, player_sum), reward, action))
-#     return game_history
