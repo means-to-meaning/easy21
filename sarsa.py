@@ -16,12 +16,14 @@ class Params():
         players_sum = range(1, 22)
         states = [(a, b) for a in dealers_card for b in players_sum]
         self.Q_sa = {}
+        self.N_sa = {}
         for state in states:
             # ALGO_CHOICE: player should never stick if dealer has higher card
             if state[0] >= state[1]:
                 self.Q_sa[state] = {'hit': 0, 'stick': -1}
             else:
                 self.Q_sa[state] = {'hit': 0, 'stick': 0}
+            self.N_sa[state] = {'hit': 0, 'stick': 0}
         self.optimal_policy = dict.fromkeys(states, None)
         self.N_s = dict.fromkeys(states, 0)
 
@@ -58,7 +60,6 @@ class Params():
 
 
 def play_game(sarsa_params):
-    alpha = 1
     dealers_card = range(1, 11)
     players_sum = range(1, 22)
     states = [(a, b) for a in dealers_card for b in players_sum]
@@ -73,24 +74,26 @@ def play_game(sarsa_params):
     action = str(sarsa_params.get_action(state))
     while not (easy21.is_player_bust(state)):
         new_state, reward, dealers_sum = easy21.step(state, action)
-        if action == "stick":
+        sarsa_params.N_s[state] += 1
+        sarsa_params.N_sa[state][action] += 1
+        if action == "stick" or reward == -1:
             game_history.append((state, action, reward, dealers_sum, new_state))
             break
-        sarsa_params.N_s[state] += 1
+        game_history.append((state, action, reward, dealers_sum, new_state))
         new_action = str(sarsa_params.get_action(new_state))
-        new_new_state, new_reward, new_dealers_sum = easy21.step(new_state, new_action)
-        delta = new_reward + sarsa_params.llambda * \
-                             sarsa_params.Q_sa[new_state][new_action] - \
+        delta = reward + \
+                sarsa_params.llambda * \
+                sarsa_params.Q_sa[new_state][new_action] - \
                 sarsa_params.Q_sa[state][action]
         E_sa[state][action] += 1
         for a_state in states:
             for an_action in sarsa_params.Q_sa[a_state]:
+                if sarsa_params.N_sa[a_state][an_action] != 0:
+                    alpha = 1 / sarsa_params.N_sa[a_state][an_action]
+                else:
+                    alpha = 1
                 updated_policy_reward = sarsa_params.Q_sa[a_state][an_action] + alpha * delta * E_sa[a_state][an_action]
                 sarsa_params.update_policy(a_state, an_action, updated_policy_reward)
-        game_history.append((state, action, reward, dealers_sum, new_state))
-        if new_action == "stick":
-            game_history.append((new_state, new_action, new_reward, new_dealers_sum, new_new_state))
-            break
         state = new_state
         action = new_action
     return (game_history, sarsa_params)
@@ -145,6 +148,12 @@ def plot_policy_function(policy):
     ax.set_zlabel('Action')
     plt.show()
 
+def mse_policies(policy1, policy2):
+    mse = 0
+    for state in policy1:
+        for action in policy1[state]:
+            mse = mse + (policy1[state][action] - policy2[state][action]) ** 2
+    return(mse)
 
 def main():
     policy_file = "data/Q_sa.pkl"
@@ -152,16 +161,28 @@ def main():
         # evalutate existing policy
         mc_params = MCParams()
         mc_params = pickle.load(open(policy_file, "rb"))
-        optimal_policy = mc_params.optimal_policy
-        sarsa_params = Params(N_0=100, llambda=0)
+        lambda_list = np.linspace(0, 1, num=11)
+        # for llambda in lambda_list:
+        llambda = 0
+        mse_history = {}
+        mse_final = {}
+        sarsa_params = Params(N_0=100, llambda=llambda)
         n_iter = 1000
+        mse_ts = []
         for i in range(n_iter):
+            if i % 100 == 0:
+                print(i)
             game_history, sarsa_params = play_game(sarsa_params)
-        diff = 0
-        for state in sarsa_params.Q_sa:
-            for action in sarsa_params.Q_sa[state]:
-                diff = diff + (sarsa_params.Q_sa[state][action] - mc_params.Q_sa[state][action]) ** 2
-        print(diff)
+            if llambda in [0, 1]:
+                mse = mse_policies(sarsa_params.Q_sa, mc_params.Q_sa)
+                mse_ts.append(mse)
+        if llambda in [0, 1]:
+            mse_history[llambda] = mse_ts
+        mse = mse_policies(sarsa_params.Q_sa, mc_params.Q_sa)
+        mse_final[llambda] = mse
+        print(mse)
+        plt.plot(mse_history[llambda])
+        plt.show()
 
 if __name__ == "__main__":
     main()
