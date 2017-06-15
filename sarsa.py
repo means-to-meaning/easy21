@@ -13,7 +13,7 @@ class Params():
         self.N_0 = N_0
         self.llambda = llambda
         dealers_card = range(1, 11)
-        players_sum = range(1, 22)
+        players_sum = range(-9, 31)
         states = [(a, b) for a in dealers_card for b in players_sum]
         self.Q_sa = {}
         self.N_sa = {}
@@ -61,7 +61,7 @@ class Params():
 
 def play_game(sarsa_params):
     dealers_card = range(1, 11)
-    players_sum = range(1, 22)
+    players_sum = range(-9, 31)
     states = [(a, b) for a in dealers_card for b in players_sum]
     E_sa = {}
     for state in states:
@@ -76,9 +76,6 @@ def play_game(sarsa_params):
         new_state, reward, dealers_sum = easy21.step(state, action)
         sarsa_params.N_s[state] += 1
         sarsa_params.N_sa[state][action] += 1
-        if action == "stick" or reward == -1:
-            game_history.append((state, action, reward, dealers_sum, new_state))
-            break
         game_history.append((state, action, reward, dealers_sum, new_state))
         new_action = str(sarsa_params.get_action(new_state))
         delta = reward + \
@@ -94,6 +91,8 @@ def play_game(sarsa_params):
                     alpha = 1
                 updated_policy_reward = sarsa_params.Q_sa[a_state][an_action] + alpha * delta * E_sa[a_state][an_action]
                 sarsa_params.update_policy(a_state, an_action, updated_policy_reward)
+        if action == "stick" or reward == -1:
+            break
         state = new_state
         action = new_action
     return (game_history, sarsa_params)
@@ -163,7 +162,7 @@ def main():
         mc_params = pickle.load(open(policy_file, "rb"))
         lambda_list = np.linspace(0, 1, num=11)
         # for llambda in lambda_list:
-        llambda = 0
+        llambda = 1
         mse_history = {}
         mse_final = {}
         sarsa_params = Params(N_0=100, llambda=llambda)
@@ -174,11 +173,11 @@ def main():
                 print(i)
             game_history, sarsa_params = play_game(sarsa_params)
             if llambda in [0, 1]:
-                mse = mse_policies(sarsa_params.Q_sa, mc_params.Q_sa)
+                mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
                 mse_ts.append(mse)
         if llambda in [0, 1]:
             mse_history[llambda] = mse_ts
-        mse = mse_policies(sarsa_params.Q_sa, mc_params.Q_sa)
+        mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
         mse_final[llambda] = mse
         print(mse)
         plt.plot(mse_history[llambda])
