@@ -8,17 +8,10 @@ def get_first_card():
 def get_card_color(n=1):
     return np.random.choice(['red', 'black'], size=n, p=[1/3, 2/3])[0]
 
-def player_play(pl_cards_sum):
-    new_card = get_first_card()
-    card_color = get_card_color()
-    if card_color == 'red':
-        pl_cards_sum = pl_cards_sum - new_card
-    elif card_color == 'black':
-        pl_cards_sum = pl_cards_sum + new_card
-    return pl_cards_sum
-
 def get_new_card():
-    new_card = get_first_card()
+    lowest_card_value = 1
+    highest_card_value = 11
+    new_card = np.random.randint(lowest_card_value, highest_card_value, size=1)[0]
     card_color = get_card_color()
     if card_color == 'red':
         return - new_card
@@ -45,7 +38,7 @@ def step(state, action):
     dealers_sum = None
     reward = None
     if action == "hit":
-        players_sum = player_play(players_sum)
+        players_sum += get_new_card()
         state = (dealers_card, players_sum)
         if is_player_bust(state):
             reward = -1

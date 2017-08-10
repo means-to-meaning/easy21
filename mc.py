@@ -53,10 +53,10 @@ class MCParams():
             params["N_sa"] = None
         return params
 
-    def iterate_value(self, state, reward):
-        G = reward
-        self.N_s[state] += 1
-        self.V_s[state] = self.V_s[state] + (1 / self.N_s[state]) * (G - self.V_s[state])
+    # def iterate_value(self, state, reward):
+    #     G = reward
+    #     self.N_s[state] += 1
+    #     self.V_s[state] = self.V_s[state] + (1 / self.N_s[state]) * (G - self.V_s[state])
 
     def iterate_policy(self, state, action, reward):
         # if state == (2,1):
@@ -90,6 +90,14 @@ class MCParams():
             else:
                 action = np.random.choice(['hit', 'stick'], size=1, p=[1 / 2, 1 / 2])[0]
         return action
+
+    def calculate_optimal_value(self):
+        for state in self.Q_sa:
+            action_rewards_dict = self.Q_sa[state]
+            max_value = max(action_rewards_dict.values())
+            self.V_s[state] = max_value
+
+
 
     # def get_optimal_policy(self):
     #     optimal_policy = dict.fromkeys(self.V_s.keys(), None)
@@ -157,14 +165,14 @@ def mc_policy_iteration(max_iter=10000):
         # if reward > -1:
         #     print("Positive reward:" + str(reward))
         mc_params.n_games += 1
-        if game_history[-1][2] == 1:
+        final_reward = game_history[-1][2]
+        if final_reward == 1:
             mc_params.n_wins += 1
         for record in game_history:
             state = record[0]
             action = record[1]
             reward = record[2]
-            mc_params.iterate_value(state, reward)
-            mc_params.iterate_policy(state, action, reward)
+            mc_params.iterate_policy(state, action, final_reward)
         loop_counter += 1
     return mc_params
 
@@ -190,7 +198,8 @@ def main():
     policy_file = "data/Q_sa.pkl"
     if not os.path.exists(policy_file):
         # iterate policy
-        mc_params = mc_policy_iteration(max_iter=1000000)
+        mc_params = mc_policy_iteration(max_iter=100000)
+        mc_params.calculate_optimal_value()
         print(mc_params[(10, 12)])
         mc_params.plot_value_function()
         mc_params.plot_policy_function()
