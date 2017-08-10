@@ -1,5 +1,7 @@
 import easy21
+import logging
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import pickle
@@ -7,24 +9,41 @@ import os
 from mc import MCParams
 np.random.seed(42)
 
+console_log_legel = logging.INFO
+file_log_level = logging.DEBUG
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+# create file handler which logs even debug messages
+fh = logging.FileHandler('easy21.log')
+fh.setLevel(file_log_level)
+# create console handler with a higher log level
+ch = logging.StreamHandler()
+ch.setLevel(console_log_legel)
+# create formatter and add it to the handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+fh.setFormatter(formatter)
+# add the handlers to logger
+logger.addHandler(ch)
+logger.addHandler(fh)
+
 class Params():
 
     def __init__(self, N_0=None, llambda=None):
         self.N_0 = N_0
         self.llambda = llambda
+        self.gamma = 1
         dealers_card = range(1, 11)
-        players_sum = range(-9, 31)
+        players_sum = range(-9, 32)
         states = [(a, b) for a in dealers_card for b in players_sum]
         self.Q_sa = {}
         self.N_sa = {}
         for state in states:
-            # ALGO_CHOICE: player should never stick if dealer has higher card
-            if state[0] >= state[1]:
-                self.Q_sa[state] = {'hit': 0, 'stick': -1}
-            else:
-                self.Q_sa[state] = {'hit': 0, 'stick': 0}
             self.N_sa[state] = {'hit': 0, 'stick': 0}
-        self.optimal_policy = dict.fromkeys(states, None)
+            self.Q_sa[state] = {'hit': 0, 'stick': 0}
+        pol_keys = states
+        pol_values = np.random.choice(['hit', 'stick'], size=len(states), p=[1 / 2, 1 / 2])
+        self.optimal_policy = dict(zip(pol_keys, pol_values))
         self.N_s = dict.fromkeys(states, 0)
 
     def __getitem__(self, state):
@@ -44,53 +63,57 @@ class Params():
     def get_action(self, state):
         dealers_card = state[0]
         players_sum = state[1]
-        # ALGO_CHOICE: never stick if less than dealers card else we automatically loose
-        if players_sum <= dealers_card:
-            return 'hit'
         eps = self.N_0 / (self.N_0 + self.N_s[state])
         action_type = np.random.choice(["explore", "exploit"], size=1, p=[eps, 1 - eps])[0]
         if action_type == "explore":
             action = np.random.choice(['hit', 'stick'], size=1, p=[1 / 2, 1 / 2])[0]
         elif action_type == "exploit":
-            if self.optimal_policy[state] is not None:
-                action = self.optimal_policy[state]
-            else:
-                action = np.random.choice(['hit', 'stick'], size=1, p=[1 / 2, 1 / 2])[0]
+            assert state in self.optimal_policy
+            action = self.optimal_policy[state]
         return action
 
 
 def play_game(sarsa_params):
     dealers_card = range(1, 11)
-    players_sum = range(-9, 31)
+    players_sum = range(-9, 32)
     states = [(a, b) for a in dealers_card for b in players_sum]
     E_sa = {}
     for state in states:
         E_sa[state] = {'hit': 0, 'stick': 0}
-    dealers_first_card = easy21.get_card()
-    players_first_card = easy21.get_card()
+    # initialize STATE
+    dealers_first_card = easy21.get_first_card()
+    players_first_card = easy21.get_first_card()
     state = (dealers_first_card, players_first_card)
+    # initialize ACTION
+    action = str(sarsa_params.get_action(state))
     reward = None
     game_history = []
-    action = str(sarsa_params.get_action(state))
     while not (easy21.is_player_bust(state)):
         new_state, reward, dealers_sum = easy21.step(state, action)
         sarsa_params.N_s[state] += 1
         sarsa_params.N_sa[state][action] += 1
         game_history.append((state, action, reward, dealers_sum, new_state))
         new_action = str(sarsa_params.get_action(new_state))
+        assert new_state in sarsa_params.Q_sa, '{:s} not in'.format(str(new_state))
         delta = reward + \
-                sarsa_params.llambda * \
+                sarsa_params.gamma * \
                 sarsa_params.Q_sa[new_state][new_action] - \
                 sarsa_params.Q_sa[state][action]
         E_sa[state][action] += 1
         for a_state in states:
+            assert a_state in sarsa_params.Q_sa, str(a_state)
             for an_action in sarsa_params.Q_sa[a_state]:
-                if sarsa_params.N_sa[a_state][an_action] != 0:
+                assert an_action in sarsa_params.Q_sa[a_state]
+                if sarsa_params.N_sa[a_state][an_action] > 0:
                     alpha = 1 / sarsa_params.N_sa[a_state][an_action]
-                else:
-                    alpha = 1
-                updated_policy_reward = sarsa_params.Q_sa[a_state][an_action] + alpha * delta * E_sa[a_state][an_action]
-                sarsa_params.update_policy(a_state, an_action, updated_policy_reward)
+                    updated_policy_reward = sarsa_params.Q_sa[a_state][an_action] + \
+                                            alpha * delta * E_sa[a_state][an_action]
+                    sarsa_params.update_policy(a_state, an_action, updated_policy_reward)
+                    E_sa[a_state][an_action] = sarsa_params.gamma * sarsa_params.llambda * E_sa[a_state][an_action]
+                elif sarsa_params.N_sa[a_state][an_action] == 0:
+                    # just a logical placeholder to show that for never visited states-actions
+                    #  we do nothing
+                    pass
         if action == "stick" or reward == -1:
             break
         state = new_state
@@ -155,32 +178,42 @@ def mse_policies(policy1, policy2):
     return(mse)
 
 def main():
-    policy_file = "data/Q_sa.pkl"
+    policy_file = "data/Q_sa_.pkl"
     if os.path.exists(policy_file):
         # evalutate existing policy
-        mc_params = MCParams()
         mc_params = pickle.load(open(policy_file, "rb"))
-        lambda_list = np.linspace(0, 1, num=11)
+        lambda_list = np.linspace(0, 1, num=6)
+        lambda_detail_list = [0.0, 1.0]
         # for llambda in lambda_list:
         llambda = 1
         mse_history = {}
         mse_final = {}
         sarsa_params = Params(N_0=100, llambda=llambda)
-        n_iter = 1000
-        mse_ts = []
-        for i in range(n_iter):
-            if i % 100 == 0:
-                print(i)
-            game_history, sarsa_params = play_game(sarsa_params)
-            if llambda in [0, 1]:
+        n_iter = 100000
+        for llambda in lambda_list:
+            mse_ts = []
+            logger.info("Starting SARSA game. lambda=" + str(llambda))
+            for i in range(1, n_iter + 1):
+                game_history, sarsa_params = play_game(sarsa_params)
+                if i % 1000 == 0:
+                    mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
+                    logger.info("Playing game number: " + str(i) + ", MSE:" + str(mse))
+                if llambda in lambda_detail_list:
+                    mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
+                    mse_ts.append(mse)
+            logger.info("Finished SARSA games.")
+            if llambda in lambda_detail_list:
                 mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
-                mse_ts.append(mse)
-        if llambda in [0, 1]:
-            mse_history[llambda] = mse_ts
-        mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
-        mse_final[llambda] = mse
-        print(mse)
-        plt.plot(mse_history[llambda])
+                mse_history[llambda] = mse_ts
+            mse_final[llambda] = mse
+        plt.figure(1)
+        for llambda in lambda_detail_list:
+            plt.plot(mse_history[llambda], color=cm.hot(llambda-0.1), linestyle='-', label=str(llambda))
+        plt.legend(loc='upper left')
+        plt.show()
+
+        plt.figure(2)
+        plt.plot(list(mse_final.keys()), list(mse_final.values()), 'ro')
         plt.show()
 
 if __name__ == "__main__":

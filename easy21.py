@@ -1,35 +1,36 @@
 import numpy as np
 
-def get_card():
+def get_first_card():
     lowest_card_value = 1
     highest_card_value = 11
     return np.random.randint(lowest_card_value, highest_card_value, size=1)[0]
 
-def red_or_black(n=1):
+def get_card_color(n=1):
     return np.random.choice(['red', 'black'], size=n, p=[1/3, 2/3])[0]
 
 def player_play(pl_cards_sum):
-    new_card = get_card()
-    card_color = red_or_black()
+    new_card = get_first_card()
+    card_color = get_card_color()
     if card_color == 'red':
         pl_cards_sum = pl_cards_sum - new_card
     elif card_color == 'black':
         pl_cards_sum = pl_cards_sum + new_card
     return pl_cards_sum
 
+def get_new_card():
+    new_card = get_first_card()
+    card_color = get_card_color()
+    if card_color == 'red':
+        return - new_card
+    elif card_color == 'black':
+        return new_card
 
 def dealer_play(state):
     de_first_card = state[0]
-    players_sum = state[1]
     cards_sum = de_first_card
-    #
     while (cards_sum < 17 and cards_sum > 0):
-        new_card = get_card()
-        card_color = red_or_black()
-        if card_color == 'red':
-            cards_sum = cards_sum - new_card
-        elif card_color == 'black':
-            cards_sum = cards_sum + new_card
+        new_card = get_new_card()
+        cards_sum += new_card
     return cards_sum
 
 
