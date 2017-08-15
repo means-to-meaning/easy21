@@ -171,7 +171,8 @@ def mc_policy_iteration(max_iter=10000):
         for record in game_history:
             state = record[0]
             action = record[1]
-            reward = record[2]
+            # TODO: add discounted rewards
+            # reward =
             mc_params.iterate_policy(state, action, final_reward)
         loop_counter += 1
     return mc_params
