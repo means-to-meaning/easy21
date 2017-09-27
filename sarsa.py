@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import pickle
 import os
-from mc import MCParams
+import copy
 np.random.seed(42)
 
 console_log_legel = logging.INFO
@@ -72,53 +72,49 @@ class Params():
             action = self.optimal_policy[state]
         return action
 
+def get_action(state, Q_sa, N_sa, N_0=100):
+    N_s = np.sum(N_sa[:, state.dealers_card, state.players_sum])
+    eps = N_0 / (N_0 + N_s)
+    action_type = np.random.choice(["explore", "exploit"], size=1, p=[eps, 1 - eps])[0]
+    if action_type == "explore":
+        action = np.random.choice([0, 1], size=1, p=[1 / 2, 1 / 2])[0]
+    elif action_type == "exploit":
+        action = np.amax(Q_sa[:, state.dealers_card, state.players_sum], axis=0)
+    return action
 
-def play_game(sarsa_params):
-    dealers_card = range(1, 11)
-    players_sum = range(-9, 32)
-    states = [(a, b) for a in dealers_card for b in players_sum]
-    E_sa = {}
-    for state in states:
-        E_sa[state] = {'hit': 0, 'stick': 0}
-    # initialize STATE
+def run_episode(Q_sa, N_sa, lambd):
+    # dealers_card = range(1, 11)
+    # players_sum = range(-9, 32)
+    # states = [(a, b) for a in dealers_card for b in players_sum]
+    E_sa = np.zeros((2, 11, 22))
+    gamma = 1
+    alpha = 1
     dealers_first_card = easy21.get_first_card()
     players_first_card = easy21.get_first_card()
-    state = (dealers_first_card, players_first_card)
+    state = easy21.State(dealers_first_card, players_first_card)
     # initialize ACTION
-    action = str(sarsa_params.get_action(state))
-    reward = None
+    action = get_action(state, Q_sa, N_sa)
     game_history = []
-    while not (easy21.is_player_bust(state)):
-        new_state, reward, dealers_sum = easy21.step(state, action)
-        sarsa_params.N_s[state] += 1
-        sarsa_params.N_sa[state][action] += 1
-        game_history.append((state, action, reward, dealers_sum, new_state))
-        new_action = str(sarsa_params.get_action(new_state))
-        assert new_state in sarsa_params.Q_sa, '{:s} not in'.format(str(new_state))
-        delta = reward + \
-                sarsa_params.gamma * \
-                sarsa_params.Q_sa[new_state][new_action] - \
-                sarsa_params.Q_sa[state][action]
-        E_sa[state][action] += 1
-        for a_state in states:
-            assert a_state in sarsa_params.Q_sa, str(a_state)
-            for an_action in sarsa_params.Q_sa[a_state]:
-                assert an_action in sarsa_params.Q_sa[a_state]
-                if sarsa_params.N_sa[a_state][an_action] > 0:
-                    alpha = 1 / sarsa_params.N_sa[a_state][an_action]
-                    updated_policy_reward = sarsa_params.Q_sa[a_state][an_action] + \
-                                            alpha * delta * E_sa[a_state][an_action]
-                    sarsa_params.update_policy(a_state, an_action, updated_policy_reward)
-                    E_sa[a_state][an_action] = sarsa_params.gamma * sarsa_params.llambda * E_sa[a_state][an_action]
-                elif sarsa_params.N_sa[a_state][an_action] == 0:
-                    # just a logical placeholder to show that for never visited states-actions
-                    #  we do nothing
-                    pass
-        if action == "stick" or reward == -1:
-            break
-        state = new_state
-        action = new_action
-    return (game_history, sarsa_params)
+    while not state.is_terminal:
+        old_players_sum = state.players_sum
+        old_dealers_card = state.dealers_card
+        old_action = action
+        next_state, reward = easy21.step(state, action)
+        if not next_state.is_terminal:
+            next_action = get_action(state, Q_sa, N_sa)
+            delta = reward + \
+                    gamma * \
+                    Q_sa[next_action, next_state.dealers_card, next_state.players_sum] - \
+                    Q_sa[old_action, old_dealers_card, old_players_sum]
+        else:
+            next_action = 0
+            delta = reward + gamma * 0 - Q_sa[old_action, old_dealers_card, old_players_sum]
+        E_sa[old_action, old_dealers_card, old_players_sum] += 1
+        Q_sa = Q_sa + alpha * delta * E_sa
+        E_sa = gamma * lambd * E_sa
+        state = next_state
+        action = next_action
+    return (Q_sa, N_sa)
 
 
 def create_meshgrid(Z):
@@ -170,45 +166,46 @@ def plot_policy_function(policy):
     ax.set_zlabel('Action')
     plt.show()
 
-def mse_policies(policy1, policy2):
-    mse = 0
-    for state in policy1:
-        for action in policy1[state]:
-            mse = mse + (policy1[state][action] - policy2[state][action]) ** 2
-    return(mse)
+def mse_policies(Q_sa1, Q_sa2):
+    assert(Q_sa1.shape == Q_sa2.shape)
+    res = np.sum(np.square(Q_sa1 - Q_sa2))
+    res = res / Q_sa1.size
+    return res
 
 def main():
     policy_file = "data/Q_sa.pkl"
     if os.path.exists(policy_file):
         # evalutate existing policy
-        mc_params = pickle.load(open(policy_file, "rb"))
+        [mc_Q_sa, mc_N_sa] = pickle.load(open(policy_file, "rb"))
         lambda_list = np.linspace(0, 1, num=6)
         lambda_detail_list = [0.0, 1.0]
         # for llambda in lambda_list:
-        llambda = 1
+        lambd = 1
         mse_history = {}
         mse_final = {}
-        sarsa_params = Params(N_0=100, llambda=llambda)
-        n_iter = 100000
-        for llambda in lambda_list:
+        # sarsa_params = Params(N_0=100, llambda=llambda)
+        n_iter = 10000
+        for lambd in lambda_list:
             mse_ts = []
-            logger.info("Starting SARSA game. lambda=" + str(llambda))
+            logger.info("Starting SARSA game. lambda=" + str(lambd))
+            Q_sa = np.zeros((2, 11, 22))
+            N_sa = np.zeros((2, 11, 22), dtype=int)
             for i in range(1, n_iter + 1):
-                game_history, sarsa_params = play_game(sarsa_params)
+                Q_sa, N_sa = run_episode(Q_sa, N_sa, lambd)
                 if i % 1000 == 0:
-                    mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
+                    mse = mse_policies(mc_Q_sa, Q_sa)
                     logger.info("Playing game number: " + str(i) + ", MSE:" + str(mse))
-                if llambda in lambda_detail_list:
-                    mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
+                if lambd in lambda_detail_list:
+                    mse = mse_policies(mc_Q_sa, Q_sa)
                     mse_ts.append(mse)
             logger.info("Finished SARSA games.")
-            if llambda in lambda_detail_list:
-                mse = mse_policies(mc_params.Q_sa, sarsa_params.Q_sa)
-                mse_history[llambda] = mse_ts
-            mse_final[llambda] = mse
+            if lambd in lambda_detail_list:
+                mse = mse_policies(mc_Q_sa, Q_sa)
+                mse_history[lambd] = mse_ts
+            mse_final[lambd] = mse
         plt.figure(1)
         for llambda in lambda_detail_list:
-            plt.plot(mse_history[llambda], color=cm.hot(llambda-0.1), linestyle='-', label=str(llambda))
+            plt.plot(mse_history[lambd], color=cm.hot(llambda-0.1), linestyle='-', label=str(llambda))
         plt.legend(loc='upper left')
         plt.show()
 
