@@ -178,7 +178,7 @@ def mse_policies(policy1, policy2):
     return(mse)
 
 def main():
-    policy_file = "data/Q_sa_.pkl"
+    policy_file = "data/Q_sa.pkl"
     if os.path.exists(policy_file):
         # evalutate existing policy
         mc_params = pickle.load(open(policy_file, "rb"))

@@ -70,6 +70,21 @@ def plot_value(Q_sa):
     ax.set_zlabel('Value')
     plt.show()
 
+def plot_policy_function(Q_sa):
+    bestaction = np.argmax(Q_sa, axis=0)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    x = range(1, 11)
+    y = range(1, 22)
+    X, Y = np.meshgrid(x, y)
+    ax.plot_wireframe(X, Y, np.rollaxis(bestaction[1:, 1:], 1))
+    ax.set_xticks(range(1, 11))
+    ax.set_yticks(range(1, 22, 2))
+    ax.set_xlabel('Dealers first card')
+    ax.set_ylabel('Players sum')
+    ax.set_zlabel('Value')
+    plt.show()
+
 def get_action(state, Q_sa, N_sa, N_0=100):
     N_s = np.sum(N_sa[:, state.dealers_card, state.players_sum])
     eps = N_0 / (N_0 + N_s)
@@ -149,15 +164,20 @@ def mc_policy_iteration(n_games=1000):
 
 
 def main():
-    # policy_file = "data/Q_sa.pkl"
-    # if not os.path.exists(policy_file):
+    policy_file = "data/Q_sa.pkl"
+    if not os.path.exists(policy_file):
         # iterate policy
-    Q_sa, N_sa = mc_policy_iteration(n_games=10000)
-    plot_value(Q_sa)
-    # pickle.dump([Q_sa, N_sa], open(policy_file, "wb"))
-    # else:
-    #     # evalutate existing policy
-    #     [Q_sa, N_sa] = pickle.load(open(policy_file, "rb"))
+        Q_sa, N_sa = mc_policy_iteration(n_games=500000)
+        plot_value(Q_sa)
+        plot_policy_function(Q_sa)
+        pickle.dump([Q_sa, N_sa], open(policy_file, "wb"))
+
+    else:
+        # evalutate existing policy
+        [Q_sa, N_sa] = pickle.load(open(policy_file, "rb"))
+        plot_value(Q_sa)
+        plot_policy_function(Q_sa)
+
 
 
 if __name__ == "__main__":
