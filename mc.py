@@ -10,51 +10,6 @@ import copy
 np.random.seed(42)
 
 
-
-class MCParams():
-
-    def __init__(self):
-        self.Q_sa = np.zeros(2, 11, 21)
-        self.N_sa = np.zeros(2, 11, 21)
-
-    def __getitem__(self, state):
-        params = {}
-        params["Q_sa"] = self.Q_sa[:, state.dealers_card, state.players_sum]
-        params["N_sa"] = self.N_sa[:, state.dealers_card, state.players_sum]
-        return params
-
-    def plot_value_function(self):
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        XX, YY, ZZ = utils.create_meshgrid(self.V_s)
-        ax.plot_wireframe(XX, YY, ZZ)
-        ax.set_xticks(range(1, 11))
-        ax.set_yticks(range(1, 22, 2))
-        ax.set_xlabel('Dealers card')
-        ax.set_ylabel('Sum')
-        ax.set_zlabel('Value')
-        plt.show()
-
-    def update_action_value(self, state, action, value):
-        self.Q_sa[action, state.dealers_card, state.players_sum] += value
-
-    def update_state_count(self, state, action, value):
-        self.N_sa[action, state.dealers_card, state.players_sum] = value
-
-    def plot_policy_function(self):
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        numeric_policy = {k: MCParams.action_to_int(v) for k, v in self.optimal_policy.items()}
-        XX, YY, ZZ = utils.create_meshgrid(numeric_policy)
-        ax.plot_wireframe(XX, YY, ZZ)
-        ax.set_xticks(range(1, 11))
-        ax.set_yticks(range(1, 22, 2))
-        ax.set_zticks([-1, 1])
-        ax.set_xlabel('Dealers card')
-        ax.set_ylabel('Sum')
-        ax.set_zlabel('Action')
-        plt.show()
-
 def plot_value(Q_sa):
     bestval = np.amax(Q_sa, axis=0)
     fig = plt.figure()
@@ -144,23 +99,6 @@ def mc_policy_iteration(n_games=1000):
     print('Games {:d}, Wins {:0.2f}%'.format(games_counter,
                                              (float(wins_counter) / games_counter) * 100))
     return Q_sa, N_sa
-
-
-# def mc_policy_evaluation(mc_params, max_iter=10):
-#     loop_counter = 1
-#     while loop_counter <= max_iter:
-#         if loop_counter % 10000 == 0:
-#             print('Wins {:0.2f}%'.format(float(mc_params.n_wins)/mc_params.n_games))
-#         game_history = play_game(mc_params)
-#         for record in game_history:
-#             state = record[0]
-#             reward = record[2]
-#             mc_params.iterate_value(state, reward)
-#         loop_counter += 1
-#     return mc_params
-
-
-
 
 
 def main():

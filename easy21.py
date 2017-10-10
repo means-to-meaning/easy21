@@ -9,13 +9,13 @@ class State():
 def get_first_card():
     lowest_card_value = 1
     highest_card_value = 11
-    return np.random.randint(lowest_card_value, highest_card_value, size=1)[0]
+    return int(np.random.randint(lowest_card_value, highest_card_value, size=1)[0])
 
 
 def get_new_card():
     lowest_card_value = 1
     highest_card_value = 11
-    new_card = np.random.randint(lowest_card_value, highest_card_value, size=1)[0]
+    new_card = int(np.random.randint(lowest_card_value, highest_card_value, size=1)[0])
     card_color = np.random.choice(['red', 'black'], size=1, p=[1/3, 2/3])[0]
     if card_color == 'red':
         return - new_card

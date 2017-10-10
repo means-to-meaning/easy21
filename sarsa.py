@@ -6,6 +6,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import pickle
 import os
+import math
 import copy
 np.random.seed(42)
 
@@ -27,50 +28,6 @@ fh.setFormatter(formatter)
 logger.addHandler(ch)
 logger.addHandler(fh)
 
-class Params():
-
-    def __init__(self, N_0=None, llambda=None):
-        self.N_0 = N_0
-        self.llambda = llambda
-        self.gamma = 1
-        dealers_card = range(1, 11)
-        players_sum = range(-9, 32)
-        states = [(a, b) for a in dealers_card for b in players_sum]
-        self.Q_sa = {}
-        self.N_sa = {}
-        for state in states:
-            self.N_sa[state] = {'hit': 0, 'stick': 0}
-            self.Q_sa[state] = {'hit': 0, 'stick': 0}
-        pol_keys = states
-        pol_values = np.random.choice(['hit', 'stick'], size=len(states), p=[1 / 2, 1 / 2])
-        self.optimal_policy = dict(zip(pol_keys, pol_values))
-        self.N_s = dict.fromkeys(states, 0)
-
-    def __getitem__(self, state):
-        params = {}
-        if state in self.Q_sa:
-            params["Q_sa"] = self.Q_sa[state]
-        else:
-            params["Q_sa"] = None
-        return params
-
-    def update_policy(self, state, action, reward):
-        self.Q_sa[state][action] = reward
-        action_rewards_dict = self.Q_sa[state]
-        maxreward_action = max(action_rewards_dict, key=lambda i: action_rewards_dict[i])
-        self.optimal_policy[state] = maxreward_action
-
-    def get_action(self, state):
-        dealers_card = state[0]
-        players_sum = state[1]
-        eps = self.N_0 / (self.N_0 + self.N_s[state])
-        action_type = np.random.choice(["explore", "exploit"], size=1, p=[eps, 1 - eps])[0]
-        if action_type == "explore":
-            action = np.random.choice(['hit', 'stick'], size=1, p=[1 / 2, 1 / 2])[0]
-        elif action_type == "exploit":
-            assert state in self.optimal_policy
-            action = self.optimal_policy[state]
-        return action
 
 def get_action(state, Q_sa, N_sa, N_0=100):
     N_s = np.sum(N_sa[:, state.dealers_card, state.players_sum])
@@ -79,21 +36,18 @@ def get_action(state, Q_sa, N_sa, N_0=100):
     if action_type == "explore":
         action = np.random.choice([0, 1], size=1, p=[1 / 2, 1 / 2])[0]
     elif action_type == "exploit":
-        action = np.amax(Q_sa[:, state.dealers_card, state.players_sum], axis=0)
-    return action
+        action = np.argmax(Q_sa[:, state.dealers_card, state.players_sum], axis=0)
+    return int(action)
 
 def run_episode(Q_sa, N_sa, lambd):
-    # dealers_card = range(1, 11)
-    # players_sum = range(-9, 32)
-    # states = [(a, b) for a in dealers_card for b in players_sum]
     E_sa = np.zeros((2, 11, 22))
     gamma = 1
-    alpha = 1
     dealers_first_card = easy21.get_first_card()
     players_first_card = easy21.get_first_card()
     state = easy21.State(dealers_first_card, players_first_card)
     # initialize ACTION
     action = get_action(state, Q_sa, N_sa)
+    assert action in [0, 1], str(action)
     game_history = []
     while not state.is_terminal:
         old_players_sum = state.players_sum
@@ -109,12 +63,14 @@ def run_episode(Q_sa, N_sa, lambd):
         else:
             next_action = 0
             delta = reward + gamma * 0 - Q_sa[old_action, old_dealers_card, old_players_sum]
+        N_sa[old_action, old_dealers_card, old_players_sum] += 1
+        alpha = 1 / N_sa[old_action, old_dealers_card, old_players_sum]
         E_sa[old_action, old_dealers_card, old_players_sum] += 1
         Q_sa = Q_sa + alpha * delta * E_sa
         E_sa = gamma * lambd * E_sa
         state = next_state
         action = next_action
-    return (Q_sa, N_sa)
+    return (Q_sa, N_sa, reward)
 
 
 def create_meshgrid(Z):
@@ -173,6 +129,7 @@ def mse_policies(Q_sa1, Q_sa2):
     return res
 
 def main():
+    n_episodes = 100000
     policy_file = "data/Q_sa.pkl"
     if os.path.exists(policy_file):
         # evalutate existing policy
@@ -184,17 +141,20 @@ def main():
         mse_history = {}
         mse_final = {}
         # sarsa_params = Params(N_0=100, llambda=llambda)
-        n_iter = 10000
         for lambd in lambda_list:
             mse_ts = []
             logger.info("Starting SARSA game. lambda=" + str(lambd))
             Q_sa = np.zeros((2, 11, 22))
             N_sa = np.zeros((2, 11, 22), dtype=int)
-            for i in range(1, n_iter + 1):
-                Q_sa, N_sa = run_episode(Q_sa, N_sa, lambd)
+            wins_counter = 0
+            for i in range(1, n_episodes + 1):
+                Q_sa, N_sa, reward = run_episode(Q_sa, N_sa, lambd)
+                if reward == 1:
+                    wins_counter += 1
                 if i % 1000 == 0:
                     mse = mse_policies(mc_Q_sa, Q_sa)
                     logger.info("Playing game number: " + str(i) + ", MSE:" + str(mse))
+                    print('Games {:d}, Wins {:0.2f}%'.format(i, (wins_counter / i) * 100))
                 if lambd in lambda_detail_list:
                     mse = mse_policies(mc_Q_sa, Q_sa)
                     mse_ts.append(mse)
@@ -205,7 +165,9 @@ def main():
             mse_final[lambd] = mse
         plt.figure(1)
         for llambda in lambda_detail_list:
-            plt.plot(mse_history[lambd], color=cm.hot(llambda-0.1), linestyle='-', label=str(llambda))
+            plt.plot(mse_history[llambda], color=cm.hot(llambda-0.1), linestyle='-', label=str(llambda))
+        x1, x2, y1, y2 = plt.axis()
+        plt.axis((x1, x2, 0, 1))
         plt.legend(loc='upper left')
         plt.show()
 
