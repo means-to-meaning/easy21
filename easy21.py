@@ -69,3 +69,23 @@ def step(state, action):
     return state, reward
 
 
+def get_action(state, Q_sa, N_sa, N_0=100):
+    return get_egreedy_action(state, Q_sa, N_sa, N_0=N_0)
+
+def get_egreedy_action(state, Q_sa, N_sa, N_0=100):
+    N_s = np.sum(N_sa[:, state.dealers_card, state.players_sum])
+    eps = N_0 / (N_0 + N_s)
+    action_type = np.random.choice(["explore", "exploit"], size=1, p=[eps, 1 - eps])[0]
+    if action_type == "explore":
+        action = np.random.choice([0, 1], size=1, p=[1 / 2, 1 / 2])[0]
+    elif action_type == "exploit":
+        action = np.argmax(Q_sa[:, state.dealers_card, state.players_sum], axis=0)
+    return int(action)
+
+def get_greedy_action(state, Q_sa):
+    action = np.argmax(Q_sa[:, state.dealers_card, state.players_sum], axis=0)
+    return int(action)
+
+def get_random_action():
+    action = np.random.choice([0, 1], size=1, p=[1 / 2, 1 / 2])[0]
+    return int(action)
