@@ -31,7 +31,7 @@ logger.addHandler(ch)
 logger.addHandler(fh)
 
 
-def get_action(state, theta, feature_map):
+def get_feature_action(state, theta, feature_map):
     eps = 0.05
     action_type = np.random.choice(["explore", "exploit"], size=1, p=[eps, 1 - eps])[0]
     if action_type == "explore":
@@ -49,7 +49,7 @@ def run_episode(theta, lambd, feature_map):
     players_first_card = easy21.get_first_card()
     state = easy21.State(dealers_first_card, players_first_card)
     # initialize ACTION
-    action = get_action(state, theta, feature_map)
+    action = get_feature_action(state, theta, feature_map)
     assert action in [0, 1], str(action)
     game_history = []
     while not state.is_terminal:
@@ -58,7 +58,7 @@ def run_episode(theta, lambd, feature_map):
         old_action = action
         next_state, reward = easy21.step(state, action)
         if not next_state.is_terminal:
-            next_action = get_action(state, theta, feature_map)
+            next_action = get_feature_action(state, theta, feature_map)
             delta = reward + \
                     gamma * \
                     np.dot(feature_map[next_action, next_state.dealers_card, next_state.players_sum], theta) - \
@@ -82,19 +82,21 @@ def convert_approx_qsa(feature_map, theta):
     return Q_sa
 
 def main():
-    n_episodes = 10000
-    policy_file = "data/Q_sa.pkl"
-    if os.path.exists(policy_file):
+    n_episodes = 100000
+    qsa_file_true = "results/Q_sa_true.pkl"
+    qsa_file_sarsa_approx = "results/Q_sa_sarsa_approx.pkl"
+    if os.path.exists(qsa_file_true):
         # evalutate existing policy
-        [mc_Q_sa, mc_N_sa] = pickle.load(open(policy_file, "rb"))
-        # lambda_list = np.linspace(0, 1, num=6)
-        lambda_list = [0.0, 0.2, 1.0]
-        lambda_detail_list = [0.0, 1.0]
+        truth_dict = pickle.load(open(qsa_file_true, "rb"))
+        Q_sa_true = truth_dict["truth"]["Q_sa"]
+        lambda_list = np.linspace(0, 1, num=6)
+        lambda_detail_list = [0.0, 0.2, 1.0]
         # for llambda in lambda_list:
         lambd = 1
         mse_history = {}
         mse_final = {}
         feature_map = fl.get_feature()
+        reward_hist = np.zeros(n_episodes)
         # sarsa_params = Params(N_0=100, llambda=llambda)
         for lambd in lambda_list:
             mse_ts = []
@@ -107,29 +109,40 @@ def main():
                     wins_counter += 1
                 if i % 1000 == 0:
                     Q_sa = convert_approx_qsa(feature_map, theta)
-                    mse = utils.mse_policies(mc_Q_sa, Q_sa)
+                    mse = utils.mse_qsa(Q_sa_true, Q_sa)
                     logger.info("Playing game number: " + str(i) + ", MSE:" + str(mse))
                     print('Games {:d}, Wins {:0.2f}%'.format(i, (wins_counter / i) * 100))
                 if lambd in lambda_detail_list:
+                    reward_hist[i - 1] = reward
                     Q_sa = convert_approx_qsa(feature_map, theta)
-                    mse = utils.mse_policies(mc_Q_sa, Q_sa)
+                    mse = utils.mse_qsa(Q_sa_true, Q_sa)
                     mse_ts.append(mse)
             logger.info("Finished SARSA games.")
             if lambd in lambda_detail_list:
                 Q_sa = convert_approx_qsa(feature_map, theta)
-                mse = utils.mse_policies(mc_Q_sa, Q_sa)
+                mse = utils.mse_qsa(Q_sa_true, Q_sa)
                 mse_history[lambd] = mse_ts
             mse_final[lambd] = mse
-        plt.figure(1)
-        for llambda in lambda_detail_list:
-            plt.plot(mse_history[llambda], color=cm.hot(llambda-0.1), linestyle='-', label=str(llambda))
-        x1, x2, y1, y2 = plt.axis()
-        plt.axis((x1, x2, 0, 1))
-        plt.legend(loc='upper left')
+            if lambd == 0.2:
+                pickle.dump({"sarsa_approx": {"Q_sa": Q_sa, "N_sa": [], "reward_hist": reward_hist,
+                                        "mse_hist": mse_history[lambd]}}, open(qsa_file_sarsa_approx, "wb"))
+
+        fig1 = plt.figure()
+        ax1 = fig1.add_subplot(111)
+        for llambda in [0.0, 1.0]:
+            ax1.plot(mse_history[llambda], color=cm.hot(llambda-0.1), linestyle='-', label='lambda ' + str(llambda))
+        x1, x2, y1, y2 = ax1.axis()
+        ax1.axis((x1, x2, 0, 1))
+        ax1.legend(loc='upper left')
+        ax1.set_xlabel('# Episodes')
+        ax1.set_ylabel('MSE')
         plt.show()
 
-        plt.figure(2)
-        plt.plot(list(mse_final.keys()), list(mse_final.values()), 'ro')
+        fig1 = plt.figure()
+        ax1 = fig1.add_subplot(111)
+        ax1.plot(list(mse_final.keys()), list(mse_final.values()), 'ro')
+        ax1.set_xlabel('lambda')
+        ax1.set_ylabel('Final MSE - {} episodes'.format(n_episodes))
         plt.show()
 
 if __name__ == "__main__":
